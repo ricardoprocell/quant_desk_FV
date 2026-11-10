@@ -234,7 +234,7 @@ def _valuation(T, th, legs, opt_idx, S, r, q, model="bsm"):
         return
     c1, c2, c3 = st.columns([1.4, 1, 1])
     which = c1.selectbox(T("which_leg"), opt_idx, format_func=lambda i: f"#{i+1} · {T('l_'+legs[i].cp) if ('l_'+legs[i].cp) else legs[i].cp} {legs[i].K:g} · {legs[i].T*365:.0f}d · {legs[i].qty:+g}")
-    american = c2.toggle(T("american"), False, help=T("american_help"))
+    american = c2.toggle(T("american"), False, help=T("american_help"), key="om_american")   # keyed: switching language must not reset it
     L = legs[which]
     cp, K, Tn, sg = L.cp, L.K, L.T, L.sig
     S_mkt = S
