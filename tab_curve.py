@@ -39,7 +39,7 @@ def risk_cached(key, freq, method, notional, fixed, T, receive, horizon):
     for k, (nm, s, l, b) in SCEN.items():
         scen[k] = R.pnl_scenarios(c, f, {k: R.scenario_bumps(t, s, l, b)})[k]
     out["scen"] = scen
-    cr = R.carry_roll(c, notional, T, freq, horizon)
+    cr = R.carry_roll(c, notional, T, freq, horizon, fixed)
     sgn = 1 if receive else -1
     out["carry"] = {k: (sgn * v if isinstance(v, float) else v) for k, v in cr.items()}
     return out

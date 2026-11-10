@@ -60,11 +60,11 @@ def fwd_bucket_curve(base: R.Curve, edges, k, bp):
 
 # ------------------------------------------------------------------------------ DV01 family
 def _central(fn, make, bp):
-    return (fn(make(-bp)) - fn(make(+bp))) / 2.0          # P&L for a `bp` fall (positive = gains when rates fall)
+    return (fn(make(-bp)) - fn(make(+bp))) / (2.0 * bp)   # central difference, normalised to a 1 bp FALL (positive = gains when rates fall); independent of the bump size
 
 
 def zero_dv01(curve, fn, bp=1.0):
-    return (fn(parallel_zero_curve(curve, -bp)) - fn(parallel_zero_curve(curve, bp))) / 2.0
+    return (fn(parallel_zero_curve(curve, -bp)) - fn(parallel_zero_curve(curve, bp))) / (2.0 * bp)
 
 
 def zero_bucket_dv01(curve, fn, nodes=None, bp=1.0):

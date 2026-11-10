@@ -58,6 +58,15 @@ def arbitrage(S, F_mkt, r, T, u=0.0, y=0.0, qty=1.0, tol_bp=0.0):
     return {"F_fair": F, "F_mkt": F_mkt, "gap": gap, "gap_pct": gap / F, "profit_T": gap * qty, "profit_pv": pv, "signal": sig}
 
 
+def _tlabels(ts):
+    """Column labels 't=..' for replication dates. Two decimals when they are unique; otherwise days (then days with an index), so short-dated
+    contracts (< ~2 weeks) never produce duplicate column names (pandas Styler refuses non-unique columns)."""
+    for lab in ([f"t={t:.2f}" for t in ts], [f"t={t:.4f}" for t in ts], [f"t={t * 365:.2f}d" for t in ts]):
+        if len(set(lab)) == len(lab):
+            return lab
+    return [f"t{k}={t * 365:.3f}d" for k, t in enumerate(ts)]
+
+
 def replication_table(S0, K, r, T, u=0.0, y=0.0, steps=4, pos=1, path=None):
     """Replicating portfolio of a LONG forward (struck K, delivery T): hold n_t=e^{-(y-u)(T-t)} units, borrow K e^{-r(T-t)}.
     Rows = movements, columns = t. `path` = spot at each t (default: grows at r+u-y, i.e. spot follows carry).
@@ -88,7 +97,7 @@ def replication_table(S0, K, r, T, u=0.0, y=0.0, steps=4, pos=1, path=None):
     dl = np.r_[-loan[0], -np.diff(loan)]
     rows["Loan accrual/Δ"] = dl
     df = pd.DataFrame(rows, index=None).T
-    df.columns = [f"t={t:.2f}" for t in ts]
+    df.columns = _tlabels(ts)
     df = df * 1.0
     if pos == -1:
         df.loc[["Commodity position  n_t·S_t", "Loan  −K e^{−r(T−t)}", "Portfolio value", "Forward value (F_t−K)e^{−r(T−t)}"]] *= -1
@@ -192,7 +201,7 @@ def fwd_greeks(spec: FwdSpec, K, P, pos=1, qty=1.0, shift=None):
 def fwd_implied(spec: FwdSpec, F_mkt, P):
     """Back out single unknowns from a market forward (others held):
     carry c* = ln(F P(T)/S_adj)/T ; convenience yield y* = u - q - b - c* ; implied financing spread (cc) over the curve;
-    implied yield q* ; implied dividend PV."""
+    implied yield q* ; implied NET PV of known flows  PV(income) - PV(costs) = S - F e^{-cT} P(T)."""
     I = pv_flows(spec.income, spec.T, P)
     U = pv_flows(spec.costs, spec.T, P)
     S_adj = spec.S - I + U
@@ -203,7 +212,7 @@ def fwd_implied(spec: FwdSpec, F_mkt, P):
     return {"carry": float(c_star), "y": float(spec.u - spec.q - spec.b - c_star), "q": float(spec.u - spec.y - spec.b - c_star),
             "u": float(c_star + spec.y + spec.q + spec.b), "b": float(spec.u - spec.y - spec.q - c_star),
             "fin_spread": float(fin_spread), "implied_repo": float(z + fin_spread),
-            "pv_income_implied": float(spec.S + U - F_mkt * np.exp(-spec.carry * spec.T) * P(spec.T))}
+            "pv_income_implied": float(spec.S - F_mkt * np.exp(-spec.carry * spec.T) * P(spec.T))}   # implied PV(income) - PV(costs)  (net, same basis as the table input column)
 
 
 def fwd_band(spec: FwdSpec, P, half_spread=0.0, borrow_spread=0.0, lend_spread=0.0, fee=0.0):
@@ -264,7 +273,7 @@ def replication_general(spec: FwdSpec, K, P, steps=4, path=None, pos=1):
         rows["port"].append(n_t * (s - inc + cst) - K * PtT)
         rows["fwd"].append((F_t - K) * PtT)
     df = pd.DataFrame(rows).T
-    df.columns = [f"t={t:.2f}" for t in ts]
+    df.columns = _tlabels(ts)
     sgn = -1.0 if pos == -1 else 1.0
     err = float(np.max(np.abs(np.array(rows["port"]) - np.array(rows["fwd"]))))
     for k in ("asset", "inc", "cost", "loan", "port", "fwd"):
