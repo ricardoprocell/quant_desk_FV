@@ -69,11 +69,11 @@ def _df_from_legs(legs, grp="manual"):
                          "days": [round(l.T * 365) for l in legs], "vol": [round(l.sig * 100, 2) for l in legs], "premium": [l.premium for l in legs]})
 
 
-def _set_preset(name, S, days, sig, qty, mult, label=None, mode="replace", base=None):
+def _set_preset(name, S, days, sig, qty, mult, label=None, mode="replace", base=None, width=0.05):
     """Load a strategy. mode='replace' -> it becomes the whole position; 'combine' -> appended to `base` (the current table)
     as its own tagged block so it can be paused, isolated or removed later."""
     T = days / 365.0
-    legs = [O.Leg("call", float(np.round(S)), qty, T, sig, mult)] if name == "single" else O.build_strategy(name, S, T, sig, qty, mult)
+    legs = [O.Leg("call", float(S), qty, T, sig, mult)] if name == "single" else O.build_strategy(name, S, T, sig, qty, mult, width=width, wing=2 * width)
     label = label or name
     new = _df_from_legs(legs, label)
     if mode == "combine" and base is not None and len(base):
@@ -167,9 +167,13 @@ def render(T, th, curve):
         _set_preset("long_call" if "legs_df" not in st.session_state else preset if preset != "single" else "long_call", S, max(int(Texp * 365), 1), sig, 1, 100,
                     label=plabel("long_call" if "legs_df" not in st.session_state or preset == "single" else preset))
         st.session_state["legs_tick"] = tick
+    k1, k2, _k3 = st.columns([1.1, 1.1, 2.8])
+    # strikes are built around this centre (defaults to spot; what you type is kept across presets, and follows the spot only when the spot changes)
+    Sc = k1.number_input(T("pk_center"), 0.01, 1e7, float(round(S)), step=max(float(round(S * 0.005)), 0.5), format="%.2f", key=f"pk_c_{round(S, 2)}", help=T("pk_center_help"))
+    wd = k2.number_input(T("pk_width"), 0.5, 50.0, 5.0, 0.5, format="%.1f", key="pk_w", help=T("pk_width_help")) / 100
     p5.markdown("<div style='height:1.65rem'></div>", unsafe_allow_html=True)
     if p5.button(T("apply_add") if mode == "combine" else T("apply"), width="stretch", type="primary"):
-        _set_preset(preset, S, max(int(Texp * 365), 1), sig, pq, mult, label=plabel(preset), mode=mode, base=st.session_state.get("legs_cur", st.session_state["legs_df"]))
+        _set_preset(preset, Sc, max(int(Texp * 365), 1), sig, pq, mult, label=plabel(preset), mode=mode, base=st.session_state.get("legs_cur", st.session_state["legs_df"]), width=wd)
         st.rerun()
     ldf = st.data_editor(_norm(st.session_state["legs_df"]), hide_index=True, width="stretch", num_rows="dynamic", key=f"legs{st.session_state.get('legs_ver', 0)}",
                          column_config={"on": st.column_config.CheckboxColumn(T("pm_on"), help=T("pm_on_help"), default=True, width="small"),
