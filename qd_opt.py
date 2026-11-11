@@ -354,7 +354,7 @@ def build_strategy(name, S, T, sig, qty=1, mult=100.0, width=0.05, wing=0.10):
     """Library of defined strategies around spot S (strikes rounded to 1)."""
     k = lambda m: float(np.round(S * m))
     L = lambda cp, K, qt: Leg(cp, K, qt * qty, T, sig, mult)
-    A = k(1.0)
+    A = float(S)
     lo, hi = k(1 - width), k(1 + width)
     wlo, whi = k(1 - wing), k(1 + wing)
     lib = {
