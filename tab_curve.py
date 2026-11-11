@@ -205,16 +205,32 @@ def render(T, th, quotes, meta):
                 curve0 = None
         if curve0 is not None:
             s0 = R.curve_stats(curve0)
-            dd = lambda k, sc_=1.0: (stt[k] - s0[k]) * sc_
-            nn = lambda v: None if (v is None or np.isnan(v)) else v
-            ui.kpi_strip(th, [
-                {"label": T("vm_d", x="2Y zero"), "value": nn(dd("z2", 1e4)), "dec": 2, "suffix": " bp", "sub": T("vm_title"), "tone": "pos" if dd("z2") >= 0 else "neg"},
-                {"label": T("vm_d", x="10Y zero"), "value": nn(dd("z10", 1e4)), "dec": 2, "suffix": " bp", "sub": T("cc"), "tone": "pos" if dd("z10") >= 0 else "neg"},
-                {"label": T("vm_d", x="30Y zero"), "value": nn(dd("z30", 1e4)), "dec": 2, "suffix": " bp", "sub": T("cc"), "tone": "pos" if dd("z30") >= 0 else "neg"},
-                {"label": T("vm_d", x="2s10s"), "value": nn(dd("s2s10s")), "dec": 2, "suffix": " bp", "sub": T("shape_" + stt["shape"])},
-                {"label": T("vm_d", x="5y5y"), "value": nn(dd("f5y5y", 1e4)), "dec": 2, "suffix": " bp", "sub": T("annual")},
-                {"label": T("vm_d", x=T("k_fly")), "value": nn(dd("fly_2_5_10")), "dec": 2, "suffix": " bp", "sub": "2s5s10s"},
-            ])
+            nn = lambda v: None if (v is None or np.isnan(v)) else float(v)
+            tg_ = np.linspace(0.02, min(curve.tmax, curve0.tmax), 600)
+            dz = (np.asarray(curve.zero(tg_, "cc")) - np.asarray(curve0.zero(tg_, "cc"))) * 1e4
+            i_max = int(np.argmax(np.abs(dz)))
+            tone = lambda v: "pos" if v >= 0 else "neg"
+            tlab = lambda t_: f"{t_*365:.0f}D" if t_ < 1/12 - 1e-9 else f"{t_*12:.0f}M" if t_ < 1 else f"{t_:g}Y"
+            edited = []
+            try:
+                q0 = {(round(float(r_.years), 6), str(r_.kind)): float(r_.rate) for r_ in base_q.itertuples()}
+                for i_ in curve.instruments:
+                    r0_ = q0.get((round(float(i_.tenor), 6), str(i_.kind)))
+                    if r0_ is not None and abs(i_.quote * 100 - r0_) > 1e-9:
+                        edited.append(i_)
+            except Exception:  # noqa: BLE001
+                edited = []
+            cards = []
+            for i_ in edited[:3]:
+                v_ = float((np.asarray(curve.zero(max(i_.tenor, 0.02), "cc")) - np.asarray(curve0.zero(max(i_.tenor, 0.02), "cc"))) * 1e4)
+                cards.append({"label": T("vm_d", x=f"{tlab(i_.tenor)} zero"), "value": v_, "dec": 2, "suffix": " bp", "sub": T("vm_edited", q=i_.label), "tone": tone(v_)})
+            cards.append({"label": T("vm_max"), "value": float(dz[i_max]), "dec": 2, "suffix": " bp", "sub": T("vm_at", t=tlab(tg_[i_max])), "tone": tone(dz[i_max])})
+            for lab_, k_, sc_ in (("2s10s", "s2s10s", 1.0), ("5y5y", "f5y5y", 1e4), (T("k_fly"), "fly_2_5_10", 1.0)):
+                v_ = nn((stt[k_] - s0[k_]) * sc_)
+                cards.append({"label": T("vm_d", x=lab_), "value": v_, "dec": 2, "suffix": " bp", "sub": T("vm_title") if len(cards) == 0 else T("vm_far") if abs(v_ or 0) < 0.005 else "", "tone": tone(v_ or 0)})
+            ui.kpi_strip(th, cards[:6])
+            if abs(dz).max() < 0.005:
+                ui.note(T("vm_flat"))
         c1, c2, c3 = st.columns([1.2, 1, 1])
         view = c1.segmented_control(T("view"), ["rates", "df"], default="rates", key="cview", format_func=lambda x: T("v_" + x), label_visibility="collapsed") or "rates"
         conv = c2.selectbox(T("conv"), R.CONVENTIONS, index=0, format_func=lambda x: T("c_" + x), label_visibility="collapsed")

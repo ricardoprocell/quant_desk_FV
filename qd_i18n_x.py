@@ -209,5 +209,10 @@ X = {
  "vm_title": ("Your edits vs the market curve", "Tus cambios vs la curva de mercado"),
  "vm_d": ("Δ {x} (edited − market)", "Δ {x} (editada − mercado)"),
  "vm_line": ("Market curve (before your edits)", "Curva de mercado (antes de tus cambios)"),
+ "vm_edited": ("edited: {q}", "editada: {q}"),
+ "vm_max": ("Largest Δ zero", "Mayor Δ en la curva zero"),
+ "vm_at": ("at {t}", "en {t}"),
+ "vm_far": ("no effect here", "sin efecto aquí"),
+ "vm_flat": ("The edit is real but too small to move the zero curve (below 0.005 bp). Edits to short deposits barely affect longer maturities.", "El cambio es real pero demasiado pequeño para mover la curva zero (menos de 0.005 bp). Editar depósitos cortos casi no afecta los plazos largos."),
  "vm_none": ("No edits yet: change a quote or use the quick editor and the differences vs the market appear here.", "Sin cambios todavía: modifica una tasa o usa el editor rápido y aquí aparecerán las diferencias vs el mercado."),
 }
