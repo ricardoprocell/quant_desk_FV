@@ -193,6 +193,28 @@ def render(T, th, quotes, meta):
             {"label": "5y5y fwd", "value": stt["f5y5y"] * 100 if not np.isnan(stt["f5y5y"]) else None, "dec": 3, "suffix": "%", "sub": T("annual")},
             {"label": T("k_fly"), "value": stt["fly_2_5_10"], "dec": 0, "suffix": " bp", "sub": "2s5s10s"},
         ])
+        # ---- edits vs the market curve (the quick editor / table / what-if changes are otherwise easy to miss)
+        curve0 = None
+        base_q = st.session_state.get("_q_base")
+        if base_q is not None and len(base_q):
+            try:
+                ins_m = [R.Instrument(float(r_.years), str(r_.kind), float(r_.rate) / 100, str(r_.label)) for r_ in base_q.itertuples()]
+                if _key(ins_m) != key:
+                    curve0 = build_cached(_key(ins_m), freq, method)
+            except Exception:  # noqa: BLE001
+                curve0 = None
+        if curve0 is not None:
+            s0 = R.curve_stats(curve0)
+            dd = lambda k, sc_=1.0: (stt[k] - s0[k]) * sc_
+            nn = lambda v: None if (v is None or np.isnan(v)) else v
+            ui.kpi_strip(th, [
+                {"label": T("vm_d", x="2Y zero"), "value": nn(dd("z2", 1e4)), "dec": 2, "suffix": " bp", "sub": T("vm_title"), "tone": "pos" if dd("z2") >= 0 else "neg"},
+                {"label": T("vm_d", x="10Y zero"), "value": nn(dd("z10", 1e4)), "dec": 2, "suffix": " bp", "sub": T("cc"), "tone": "pos" if dd("z10") >= 0 else "neg"},
+                {"label": T("vm_d", x="30Y zero"), "value": nn(dd("z30", 1e4)), "dec": 2, "suffix": " bp", "sub": T("cc"), "tone": "pos" if dd("z30") >= 0 else "neg"},
+                {"label": T("vm_d", x="2s10s"), "value": nn(dd("s2s10s")), "dec": 2, "suffix": " bp", "sub": T("shape_" + stt["shape"])},
+                {"label": T("vm_d", x="5y5y"), "value": nn(dd("f5y5y", 1e4)), "dec": 2, "suffix": " bp", "sub": T("annual")},
+                {"label": T("vm_d", x=T("k_fly")), "value": nn(dd("fly_2_5_10")), "dec": 2, "suffix": " bp", "sub": "2s5s10s"},
+            ])
         c1, c2, c3 = st.columns([1.2, 1, 1])
         view = c1.segmented_control(T("view"), ["rates", "df"], default="rates", key="cview", format_func=lambda x: T("v_" + x), label_visibility="collapsed") or "rates"
         conv = c2.selectbox(T("conv"), R.CONVENTIONS, index=0, format_func=lambda x: T("c_" + x), label_visibility="collapsed")
@@ -219,6 +241,8 @@ def render(T, th, quotes, meta):
             fig.add_trace(go.Scatter(x=[i.tenor for i in piv], y=[i.quote * 100 for i in piv], mode="markers", name=T("l_pillar"),
                                      marker=dict(size=9, color=th["bg"], line=dict(color=th["c"][1], width=2.2)), hovertemplate="%{text}: %{y:.3f}%",
                                      text=[i.label for i in piv]))
+            if curve0 is not None:
+                fig.add_trace(go.Scatter(x=tt, y=R.df_to_rate(curve0.df_at(tt), tt, conv) * 100, name=T("vm_line"), line=dict(color=th["mute"], width=1.8, dash="dot"), hovertemplate="%{y:.3f}%"))
             if ghost is not None:
                 gz = R.df_to_rate(ghost.df_at(tt), tt, conv) * 100
                 fig.add_trace(go.Scatter(x=tt, y=gz, name=T("sc_" + scen), line=dict(color=th["c"][4], width=2, dash="dash"), hovertemplate="%{y:.3f}%"))
