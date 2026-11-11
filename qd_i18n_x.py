@@ -206,4 +206,8 @@ X = {
  "pm_hint_single": ("One strategy in the position. Switch to Combine to stack another one on top.", "Hay una sola estrategia en la posición. Cambia a Combinar para apilar otra encima."),
  "pm_hint_multi": ("Each block is a strategy you loaded. All active legs are valued together; use Only this to look at one in isolation.",
                    "Cada bloque es una estrategia que cargaste. Todas las patas activas se valoran en conjunto; usa Solo esta para verla aislada."),
+ "vm_title": ("Your edits vs the market curve", "Tus cambios vs la curva de mercado"),
+ "vm_d": ("Δ {x} (edited − market)", "Δ {x} (editada − mercado)"),
+ "vm_line": ("Market curve (before your edits)", "Curva de mercado (antes de tus cambios)"),
+ "vm_none": ("No edits yet: change a quote or use the quick editor and the differences vs the market appear here.", "Sin cambios todavía: modifica una tasa o usa el editor rápido y aquí aparecerán las diferencias vs el mercado."),
 }

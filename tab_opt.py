@@ -234,17 +234,14 @@ def _valuation(T, th, legs, opt_idx, S, r, q, model="bsm"):
         return
     c1, c2, c3 = st.columns([1.4, 1, 1])
     which = c1.selectbox(T("which_leg"), opt_idx, format_func=lambda i: f"#{i+1} · {T('l_'+legs[i].cp) if ('l_'+legs[i].cp) else legs[i].cp} {legs[i].K:g} · {legs[i].T*365:.0f}d · {legs[i].qty:+g}")
-    american = c2.toggle(T("american"), False, help=T("american_help"))
+    american = c2.toggle(T("american"), False, help=T("american_help"), key="om_american")   # keyed: switching language must not reset it
     L = legs[which]
     cp, K, Tn, sg = L.cp, L.K, L.T, L.sig
     S_mkt = S
     S = float(O._s_eff(L, S_mkt, r))             # escrowed-dividend spot (= S when the leg has no discrete dividends)
     shift = S_mkt - S
     bsm = O.bsm(S, K, r, q, sg, Tn, cp)
-    g = O.greeks(S, K, r, q, sg, Tn, cp)
-    if L.divs:
-        g = dict(g)
-        g["theta"] = g["theta"] - g["delta"] * r * O.pv_divs(L.divs, r, Tn) / 365.0
+    g = O.leg_greeks(L, S_mkt, r, q)             # escrowed-dividend theta / rho adjustments live in one place (qd_opt)
     if model == "b76":
         g = dict(g)
         g["rho"] = O.rho_black76(S, K, r, sg, Tn, cp)
@@ -451,10 +448,11 @@ def _strategies(T, th, legs, S, r, q, sig, px, atm_iv, otm, Texp, mult):
     Tm = min(l.T for l in opt_legs)
     sig_pop = float(np.mean([l.sig for l in opt_legs if abs(l.T - Tm) < 1e-9]))     # vol of the legs that expire first
     mu, vol = (r - q - 0.5 * sig_pop ** 2) * Tm, sig_pop * np.sqrt(Tm)
-    z = (np.log(Sg / S) - mu) / vol
-    w = np.exp(-0.5 * z ** 2) / (Sg * vol * np.sqrt(2 * np.pi))
+    zg = np.linspace(-7.0, 7.0, 2801)                       # risk-neutral lognormal on its own wide grid (the +-30% chart grid truncates fat horizons)
+    Sp = S * np.exp(mu + vol * zg)
+    w = np.exp(-0.5 * zg ** 2)
     w = w / w.sum()
-    pop = float(w[tot_T > 0].sum())
+    pop = float(w[O.payoff_at_expiry(legs, Sp, S, r, q) > 0].sum())
     fmt_ = lambda x: "∞" if np.isinf(x) else f"${x:,.0f}"
     ui.kpi_strip(th, [
         {"label": T("net_cost"), "value": stt["cost"], "dec": 0, "prefix": "$", "sub": T("debit") if stt["cost"] > 0 else T("credit")},
@@ -486,7 +484,7 @@ def _strategies(T, th, legs, S, r, q, sig, px, atm_iv, otm, Texp, mult):
     for i, l in enumerate(legs):
         prem = l.premium if l.premium is not None else O.leg_price(l, S, r, q)
         gg = O.position_greeks([l], S, r, q)
-        u = O.greeks(S, l.K, r, q, l.sig, l.T, l.cp) if l.cp != "stock" else {"delta": 1.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0}
+        u = O.leg_greeks(l, S, r, q) if l.cp != "stock" else {"delta": 1.0, "gamma": 0.0, "vega": 0.0, "theta": 0.0}
         row = {"#": str(i + 1), **({T("pm_grp"): grps[i]} if multi_grp else {}), T("l_type"): T("l_" + l.cp), T("strike"): l.K, T("l_qty"): l.qty, T("prem_cash"): -l.qty * l.mult * prem,
                T("bd_unit_delta"): u["delta"], "Δ": gg["delta"], "Γ": gg["gamma"], "Vega": gg["vega"], "Θ": gg["theta"]}
         for k_ in tot:

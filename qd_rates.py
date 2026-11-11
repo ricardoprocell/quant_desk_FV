@@ -291,7 +291,7 @@ def _pv_shocked(curve, fn, bumps):
 
 def parallel_dv01(curve, fn, bp=1.0):
     n = len(curve.instruments)
-    return (_pv_shocked(curve, fn, -np.full(n, bp)) - _pv_shocked(curve, fn, np.full(n, bp))) / 2.0
+    return (_pv_shocked(curve, fn, -np.full(n, bp)) - _pv_shocked(curve, fn, np.full(n, bp))) / (2.0 * bp)
 
 
 def key_rate_dv01(curve, fn, bp=1.0):
@@ -300,7 +300,7 @@ def key_rate_dv01(curve, fn, bp=1.0):
     for k in range(n):
         b = np.zeros(n)
         b[k] = bp
-        out.append((_pv_shocked(curve, fn, -b) - _pv_shocked(curve, fn, b)) / 2.0)
+        out.append((_pv_shocked(curve, fn, -b) - _pv_shocked(curve, fn, b)) / (2.0 * bp))
     return np.array(out)
 
 
@@ -331,10 +331,13 @@ def scenario_bumps(tenors, short_bp, long_bp, belly_bp=0.0, belly_t=None, belly_
     return lin + belly_bp * g / peak if abs(peak) > 1e-12 else lin
 
 
-def carry_roll(curve: Curve, notional, T, freq, horizon):
-    """Receive-fixed swap struck at par today. Carry = accrual differential over `horizon`;
-    roll-down = revaluation after `horizon` with the curve unchanged as a function of remaining maturity."""
-    K = curve.par_rate(T, freq)
+def carry_roll(curve: Curve, notional, T, freq, horizon, fixed=None):
+    """Receive-fixed swap over `horizon` with the curve unchanged as a function of remaining maturity.
+    `fixed` = contract rate K (default: today's par rate, i.e. a swap struck at par).
+    Carry = accrual differential N (K - f) h, f = simple forward-rate-equivalent of the floating leg over [0, h].
+    Roll-down = revaluation after `horizon` minus today's PV:  N (K - par(T-h)) A(T-h) - N (K - par(T)) A(T)  (for K = par: the second term is 0)."""
+    p0 = curve.par_rate(T, freq)
+    K = p0 if fixed is None else float(fixed)
     h = horizon
     fl = (curve.df_at(0.0) / curve.df_at(h) - 1.0) / h if h > 0 else 0.0
     carry = notional * (K - fl) * h
@@ -342,7 +345,9 @@ def carry_roll(curve: Curve, notional, T, freq, horizon):
     if rem < 1.0 / freq:
         return {"K": K, "carry": carry, "roll": np.nan, "total": np.nan}
     pv_h = notional * (K - curve.par_rate(rem, freq)) * curve.annuity(rem, freq)
-    return {"K": K, "carry": carry, "roll": pv_h, "total": carry + pv_h}
+    pv_0 = notional * (K - p0) * curve.annuity(T, freq)
+    roll = pv_h - pv_0
+    return {"K": K, "carry": carry, "roll": roll, "total": carry + roll}
 
 
 def validate(curve: Curve):

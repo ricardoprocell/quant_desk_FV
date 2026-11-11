@@ -198,6 +198,18 @@ def entry_cost(legs, S0, r, q):
     return sum(L.qty * L.mult * (L.premium if L.premium is not None else leg_price(L, S0, r, q)) for L in legs)
 
 
+def leg_greeks(L, S, r, q):
+    """Greeks of ONE option leg per unit, with the escrowed-dividend adjustments when the leg carries discrete dividends:
+    S* = S - PV(divs) -> theta gets -Delta r PVD (S* accretes at r) and rho gets +Delta dS*/dr = +Delta sum t D e^{-rt} (higher r -> smaller PVD)."""
+    g = greeks(_s_eff(L, S, r), L.K, r, q, L.sig, L.T, L.cp)
+    if L.divs:
+        g = dict(g)
+        g["theta"] = g["theta"] - g["delta"] * r * pv_divs(L.divs, r, L.T) / 365.0
+        dS_dr = float(sum(t * D * np.exp(-r * t) for t, D in L.divs if 0 < t <= L.T + 1e-12))
+        g["rho"] = g["rho"] + g["delta"] * dS_dr / 100.0
+    return g
+
+
 def position_greeks(legs, S, r, q):
     """Greeks of the whole position. S may be a scalar (floats returned) or an array (arrays returned)."""
     keys = ["delta", "gamma", "vega", "theta", "rho", "vanna", "volga", "charm"]
@@ -208,10 +220,7 @@ def position_greeks(legs, S, r, q):
         if L.cp == "stock":
             tot["delta"] = tot["delta"] + L.qty * L.mult
             continue
-        g = greeks(_s_eff(L, S, r), L.K, r, q, L.sig, L.T, L.cp)
-        if L.divs:   # escrowed model: S* = S - PV(divs) drifts at r*PV(divs) as time passes -> extra theta term -Delta*r*PVD
-            g = dict(g)
-            g["theta"] = g["theta"] - g["delta"] * r * pv_divs(L.divs, r, L.T) / 365.0
+        g = leg_greeks(L, S, r, q)
         for k in keys:
             tot[k] = tot[k] + L.qty * L.mult * (np.asarray(g[k], float) if arr else float(g[k]))
     return tot
@@ -246,9 +255,11 @@ def pnl_curve(legs, Sgrid, S0, r, q, dT=0.0, dsig=0.0):
 
 def strategy_stats(legs, S0, r, q, span=0.6):
     """Max profit / loss / breakevens at expiry over a +-span spot range (unbounded flagged)."""
-    Sg = np.linspace(0.0, S0 * (1 + span) * 1.5, 4001)
+    ks = [L.K for L in legs if L.cp != "stock"]
+    Sg = np.unique(np.r_[np.linspace(0.0, S0 * (1 + span) * 1.5, 4001), ks])   # strikes = kinks of the payoff: include them so max P/L is exact
     pl = payoff_at_expiry(legs, Sg, S0, r, q)
-    be = Sg[:-1][np.sign(pl[:-1]) * np.sign(pl[1:]) < 0]
+    i = np.where(np.sign(pl[:-1]) * np.sign(pl[1:]) < 0)[0]
+    be = Sg[i] - pl[i] * (Sg[i + 1] - Sg[i]) / (pl[i + 1] - pl[i])            # linear interpolation of the zero crossing
     slope_hi = (pl[-1] - pl[-2]) / (Sg[-1] - Sg[-2])
     thr = 0.05 * sum(abs(L.qty) * L.mult for L in legs)       # tail slope above 5% of gross size = unbounded
     return {"cost": entry_cost(legs, S0, r, q),
